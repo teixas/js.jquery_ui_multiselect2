@@ -1,0 +1,9 @@
+.installed.cfg
+local
+bin/
+develop-eggs/
+dist/
+eggs/
+include/
+js.jquery_ui_multiselect2.egg-info/
+lib/
