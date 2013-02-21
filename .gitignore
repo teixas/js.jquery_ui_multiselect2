@@ -1,4 +1,5 @@
 .installed.cfg
+*.pyc
 local
 bin/
 develop-eggs/
