@@ -6,7 +6,7 @@ CHANGES
 
 - Do not register ``common.css`` by default.
 
-- Add dependency on ``ui_droppable`` and ``ui_widget.
+- Add dependency on ``ui_droppable`` and ``ui_widget``.
 
 
 2.0-rc
