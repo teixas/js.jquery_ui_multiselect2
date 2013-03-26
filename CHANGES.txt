@@ -1,6 +1,11 @@
 CHANGES
 =======
 
+2.0-rc-2
+--------
+
+- Add dependency on ``ui_button``.
+
 2.0-rc-1
 --------
 

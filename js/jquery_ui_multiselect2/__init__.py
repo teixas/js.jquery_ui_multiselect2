@@ -3,6 +3,7 @@
 from fanstatic import Group
 from fanstatic import Library
 from fanstatic import Resource
+from js.jqueryui import ui_button
 from js.jqueryui import ui_droppable
 from js.jqueryui import ui_widget
 
@@ -22,7 +23,7 @@ multiselect2_css = Resource(
 multiselect2_js = Resource(
     library,
     'js/jquery-multiselect-2.0.js',
-    depends=[ui_droppable, ui_widget]
+    depends=[ui_button, ui_droppable, ui_widget]
     )
 
 multiselect2 = Group([multiselect2_css, multiselect2_js])
