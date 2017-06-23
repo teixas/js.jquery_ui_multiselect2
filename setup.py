@@ -4,7 +4,7 @@ import os
 from setuptools import find_packages
 from setuptools import setup
 
-version = '2.0-rc-2'
+version = '2.0'
 
 
 def read(*rnames):
