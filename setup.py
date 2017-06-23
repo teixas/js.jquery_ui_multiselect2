@@ -12,7 +12,7 @@ def read(*rnames):
     return open(os.path.join(os.path.dirname(__file__), *rnames)).read()
 
 long_description = (
-    read('README.txt')
+    read('README.rst')
     + '\n' +
     read('js', 'jquery_ui_multiselect2', 'test_jquery_ui_multiselect2.txt')
     + '\n' +
