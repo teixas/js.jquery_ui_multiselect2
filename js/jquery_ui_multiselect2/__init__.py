@@ -17,31 +17,25 @@ multiselect2_common_css = Resource(
 
 multiselect2_css = Resource(
     library,
-    'css/jquery-multiselect-2.0.css',
+    'css/jquery.uix.multiselect.css',
     )
 
 multiselect2_js = Resource(
     library,
-    'js/jquery-multiselect-2.0.js',
+    'js/jquery.uix.multiselect.js',
     depends=[ui_button, ui_droppable, ui_widget]
     )
 
 multiselect2 = Group([multiselect2_css, multiselect2_js])
 
-multiselect2_en = Resource(
-    library,
-    'js/locales/jquery-multiselect-2_en.js',
-    depends=[multiselect2, ]
-    )
-
 multiselect2_fr = Resource(
     library,
-    'js/locales/jquery-multiselect-2_fr.js',
+    'js/locales/jquery.uix.multiselect_fr.js',
     depends=[multiselect2, ]
     )
 
 multiselect2_pt = Resource(
     library,
-    'js/locales/jquery-multiselect-2_pt.js',
+    'js/locales/jquery.uix.multiselect_pt.js',
     depends=[multiselect2, ]
     )

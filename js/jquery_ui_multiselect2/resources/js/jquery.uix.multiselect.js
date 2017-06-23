@@ -14,20 +14,35 @@
  *
  */
 
-(function($) {
+;(function($, window, undefined) {
+    // ECMAScript 5 Strict Mode: [John Resig Blog Post](http://ejohn.org/blog/ecmascript-5-strict-mode-json-and-more/)
+    "use strict";
+
+    // Each instance must have their own drag and drop scope. We use a global page scope counter
+    // so we do not create two instances with mistankenly the same scope! We do not support
+    // cross instance drag and drop; this would require also copying the OPTION element and it
+    // would slow the component down. This is not the widget's contract anyhow.
     var globalScope = 0;
 
     var DEF_OPTGROUP = '';
     var PRE_OPTGROUP = 'group-';
 
+    // these events will trigger on the original element
+    //var NATIVE_EVENTS = ["change"];   // for version 2.1
+
+    // a list of predefined events
+    //var EVENT_CHANGE = 'change';    // for version 2.1
     var EVENT_CHANGE = 'multiselectChange';
+    //var EVENT_SEARCH = 'beforesearch';   // for version 2.1
     var EVENT_SEARCH = 'multiselectSearch';
 
     // The jQuery.uix namespace will automatically be created if it doesn't exist
     $.widget("uix.multiselect", {
         options: {
             availableListPosition: 'right',// 'top', 'right', 'bottom', 'left'; the position of the available list (default: 'right')
+            // beforesearch: null,            // a funciton called before searching. If the default is prevented, search will not happen (for version 2.1)
             collapsableGroups: true,       // tells whether the option groups can be collapsed or not (default: true)
+            created: null,                 // a function called when the widget is done loading (default: null)
             defaultGroupName: '',          // the name of the default option group (default: '')
             filterSelected: false,         // when searching, filter selected options also? (default: false)
             locale: 'auto',                // any valid locale, 'auto', or '' for default built-in strings (default: 'auto')
@@ -35,17 +50,19 @@
             moveEffectOptions: {},         // effect options (see jQuery UI documentation) (default: {})
             moveEffectSpeed: null,         // string ('slow','fast') or number in millisecond (ignored if moveEffect is 'show') (default: null)
             optionRenderer: false,         // a function that will return the item element to be rendered in the list (default: false)
+            optionGroupRenderer: false,    // a function that will return the group item element to be rendered (default: false)
+            searchDelay: 500,              // the search delay in ms (default: 500)
             searchField: 'toggle',         // false, true, 'toggle'; set the search field behaviour (default: 'toggle')
+            searchPreFilter: null,         // prepare the search term before filtering.
+            searchFilter: null,            // a search filter. Will receive the term and OPTION element and should return a boolean value.
             searchHeader: 'available',     // 'available', 'selected'; set the list header that will host the search field (default: 'available')
             selectionMode: 'click,d&d',    // how options can be selected separated by commas: 'click', "dblclick" and 'd&d' (default: 'click,d&d')
             showDefaultGroupHeader: false, // show the default option group header (default: false)
             showEmptyGroups: false,        // always display option groups even if empty (default: false)
             splitRatio: 0.55,              // % of the left list's width of the widget total width (default 0.55)
             sortable: false,               // if the selected list should be user sortable or not
-            sortMethod: null,               // null, 'standard', 'natural'; a sort function name (see ItemComparators), or a custom function (default: null)
-            groupExpandIcon: 'ui-icon-triangle-1-e',    // Expand icon, can be '' or any jquery ui icon (default: ui-icon-triangle-1-e)
-            groupCollapseIcon: 'ui-icon-triangle-1-s',    // Collapse icon, can be '' or any jquery ui icon (default: ui-icon-triangle-1-s)
-            groupOptionIcon: 'ui-icon-bullet'    		// Group options icon, can be '' or any jquery ui icon (default: ui-icon-bullet)
+            sortMethod: null,              // null, 'standard', 'natural'; a sort function name (see ItemComparators), or a custom function (default: null)
+            selectAll: 'both'              // 'available', 'selected', 'both', 'none' - Whether or not to display a select or deselect all icon (default: 'both')
         },
 
         _create: function() {
@@ -59,18 +76,20 @@
 
             this.element.addClass('uix-multiselect-original');
             this._elementWrapper = $('<div></div>').addClass('uix-multiselect ui-widget')
+            /*
                 .css({
-                    'width': this.element.outerWidth(),
-                    'height': this.element.outerHeight()
+                  width: this.element[0].style.width || this.element.css('width'),
+                  height: this.element[0].style.height || this.element.css('height')
                 })
                 .append(
                     $('<div></div>').addClass('multiselect-selected-list')
                         .append( $('<div></div>').addClass('ui-widget-header')
-                            .append( btnDeselectAll = $('<button></button>').addClass('uix-control-right')
+                            .append( btnDeselectAll = $('<button></button>', { type:"button" }).addClass('uix-control-right')
                                 .attr('data-localekey', 'deselectAll')
                                 .attr('title', this._t('deselectAll'))
                                 .button({icons:{primary:'ui-icon-arrowthickstop-1-e'}, text:false})
                                 .click(function(e) { e.preventDefault(); e.stopPropagation(); that.optionCache.setSelectedAll(false); return false; })
+                                ['both,selected'.indexOf(this.options.selectAll)>=0 ? 'show' : 'hide']()
                             )
                             .append( selListHeader = $('<div></div>').addClass('header-text') )
                         )
@@ -79,20 +98,23 @@
                 ['right,top'.indexOf(this.options.availableListPosition)>=0?'prepend':'append'](
                     $('<div></div>').addClass('multiselect-available-list')
                         .append( $('<div></div>').addClass('ui-widget-header')
-                            .append( btnSelectAll = $('<button></button>').addClass('uix-control-right')
+                            .append( btnSelectAll = $('<button></button>', { type:"button" }).addClass('uix-control-right')
                                 .attr('data-localekey', 'selectAll')
                                 .attr('title', this._t('selectAll'))
                                 .button({icons:{primary:'ui-icon-arrowthickstop-1-w'}, text:false})
                                 .click(function(e) { e.preventDefault(); e.stopPropagation(); that.optionCache.setSelectedAll(true); return false; })
+                                ['both,available'.indexOf(this.options.selectAll)>=0 ? 'show' : 'hide']()
                             )
                             .append( avListHeader = $('<div></div>').addClass('header-text') )
 
                         )
                         .append( avListContent  = $('<div></div>').addClass('uix-list-container ui-widget-content') )
                 )
+                */
                 .insertAfter(this.element)
             ;
 
+            /*
             this._buttons = {
                 'selectAll': btnSelectAll,
                 'deselectAll': btnDeselectAll
@@ -105,15 +127,19 @@
                 'selected': selListContent.attr('id', this.scope+'_selListContent'),
                 'available': avListContent.attr('id', this.scope+'_avListContent')
             };
+            */
+            this._lists = {
+              'selected': this._initList(this.scope+'_selListContent', 'deselectAll', 'selected', false),
+              'available': this._initList(this.scope+'_avListContent', 'selectAll', 'available', true),
+              'buttonSearch': this._initSearchable()
+            };
 
             this.optionCache = new OptionCache(this);
-            this._searchDelayed = new SearchDelayed(this, {delay: 500});
-
-            this._initSearchable();
+            this._searchDelayed = new SearchDelayed(this);
 
             this._applyListDroppable();
 
-            this.refresh();
+            this.refresh(this.options.created);
         },
 
         /**
@@ -131,16 +157,16 @@
          * @param callback   function    a callback function called when the refresh is complete
          */
         refresh: function(callback) {
-            this._resize();  // just make sure we display the widget right without delay
-            AsyncFunction(function() {
+            this._doLayout();  // just make sure we display the widget right without delay
+            asyncFunction(function() {
                 this.optionCache.cleanup();
 
                 var opt, options = this.element[0].childNodes;
 
                 for (var i=0, l1=options.length; i<l1; i++) {
                     opt = options[i];
-                    if (opt.nodeType == 1) {
-                        if (opt.tagName.toUpperCase() == 'OPTGROUP') {
+                    if (opt.nodeType === 1) {
+                        if (opt.tagName.toUpperCase() === 'OPTGROUP') {
                             var optGroup = $(opt).data('option-group') || (PRE_OPTGROUP + (this.optionGroupIndex++));
                             var grpOptions = opt.childNodes;
 
@@ -148,7 +174,7 @@
 
                             for (var j=0, l2=grpOptions.length; j<l2; j++) {
                                 opt = grpOptions[j];
-                                if (opt.nodeType == 1) {
+                                if (opt.nodeType === 1) {
                                     this.optionCache.prepareOption($(opt), optGroup);
                                 }
                             }
@@ -182,7 +208,8 @@
             }
 
             if ((options.toggleInput != false) && !this._searchField.is(':visible')) {
-                this._buttons.search.trigger('click');
+                //this._buttons.search.trigger('click');
+                this._lists.buttonSearch.trigger('click');
             }
 
             this._search(options.text, !!options.silent);
@@ -195,7 +222,7 @@
          */
         locale: function(locale) {
 
-            if (locale == undefined) {
+            if (locale === undefined) {
                 return this.options.locale;
             } else {
                 this._setLocale(locale);
@@ -205,12 +232,10 @@
             }
         },
 
-        destroy: function() {
-            this._super();
-
+        _destroy: function() {
             this.optionCache.reset(true);
-            this._lists['selected'].empty().remove();
-            this._lists['available'].empty().remove();
+            this._lists['selected'].listContent.empty().remove();
+            this._lists['available'].listContent.empty().remove();
             this._elementWrapper.empty().remove();
 
             delete this.optionCache;
@@ -227,43 +252,100 @@
          * ***************************************
          */
 
+        _initList: function(id, key, side, selectAll) {
+          var that = this;
+          var obj = {};
+
+          obj.listHeader = $('<div></div>').addClass('ui-widget-header')
+            .append( obj.buttonApplyAll = $('<button></button>', {
+                  'type': 'button',
+                  'data-localekey': key,
+                  'title': this._t(key)
+                }).addClass('uix-control-right')
+                .button({icons:{primary:'ui-icon-arrowthickstop-2-e-w'}, text:false})
+                .click(function(e) { e.preventDefault(); e.stopPropagation(); that.optionCache.setSelectedAll(selectAll); return false; })
+                [('both,'+side).indexOf(this.options.selectAll)>=0 ? 'show' : 'hide']()
+            )
+            .append( obj.labelHeader = $('<div></div>').addClass('header-text') )
+          ;
+          obj.listContent = $('<div></div>', { id: id }).addClass('uix-list-container uix-' + side + '-list ui-widget-content');
+
+          return obj;
+        },
+
         _initSearchable: function() {
+            /*
             var isToggle = ('toggle' === this.options.searchField);
-            var searchHeader = this.options.searchHeader;
+            //var searchHeader = this.options.searchHeader;
 
             if (isToggle) {
                 var that = this;
-                this._buttons['search'] = $('<button></button').addClass('uix-control-right')
-                    .attr('data-localekey', 'search')
-                    .attr('title', this._t('search'))
+                //this._buttons['search'] =
+                this._lists.buttonSearch = $('<button></button', {
+                      'type': 'button',
+                      'data-localekey': 'search',
+                      'title': this._t('search')
+                    }).addClass('uix-control-right')
                     .button({icons:{primary:'ui-icon-search'}, text:false})
                     .click(function(e) {
                         e.preventDefault(); e.stopPropagation();
                         if (that._searchField.is(':visible')) {
                             var b = $(this);
-                            that._headers[searchHeader].css('visibility', 'visible').fadeTo('fast', 1.0);
+                            //that._headers[searchHeader].css('visibility', 'visible').fadeTo('fast', 1.0);
+                            that._lists[that.options.searchHeader].labelHeader.css('visibility', 'visible').fadeTo('fast', 1.0);
                             that._searchField.hide('slide', {direction: 'right'}, 200, function() { b.removeClass('ui-corner-right ui-state-active').addClass('ui-corner-all'); });
                             that._searchDelayed.cancelLastRequest();
                             that.optionCache.filter('');
                         } else {
-                            that._headers[searchHeader].fadeTo('fast', 0.1, function() { $(this).css('visibility', 'hidden'); });
+                            //that._headers[searchHeader].fadeTo('fast', 0.1, function() { $(this).css('visibility', 'hidden'); });
+                            that._lists[that.options.searchHeader].labelHeader.fadeTo('fast', 0.1, function() { $(this).css('visibility', 'hidden'); });
                             $(this).removeClass('ui-corner-all').addClass('ui-corner-right ui-state-active');
                             that._searchField.show('slide', {direction: 'right'}, 200, function() { $(this).focus(); });
                             that._search();
                         }
                         return false;
                     })
-                    .insertBefore( this._headers[searchHeader] );
+                    //.insertBefore( this._headers[searchHeader] );
+                    .insertBefore( this._lists[this.options.searchHeader].labelHeader );
             }
             if (this.options.searchField) {
                 if (!isToggle) {
-                    this._headers[searchHeader].hide();
+                    //this._headers[searchHeader].hide();
+                    this._lists[this.options.searchHeader].labelHeader.hide();
                 }
                 this._searchField = $('<input type="text" />').addClass('uix-search ui-widget-content ui-corner-' + (isToggle ? 'left' : 'all'))[isToggle ? 'hide' : 'show']()
-                    .insertBefore( this._headers[searchHeader] )
+                    //.insertBefore( this._headers[searchHeader] )
+                    .insertBefore( this._lists[this.options.searchHeader].labelHeader )
                     .focus(function() { $(this).select(); })
+                    .on("keydown keypress", function(e) { if (e.keyCode == 13) { e.preventDefault(); e.stopPropagation(); return false; } })
                     .keyup($.proxy(this._searchDelayed.request, this._searchDelayed));
             }
+            */
+          var that = this;
+
+          return $('<button></button', {
+              'type': 'button',
+              'data-localekey': 'search',
+              'title': this._t('search')
+            }).addClass('uix-control-right')
+            .button({icons:{primary:'ui-icon-search'}, text:false})
+            .click(function(e) {
+                e.preventDefault(); e.stopPropagation();
+                if (that._searchField.is(':visible')) {
+                    var b = $(this);
+                    that._lists[that.options.searchHeader].labelHeader.css('visibility', 'visible').fadeTo('fast', 1.0);
+                    that._searchField.hide('slide', {direction: 'right'}, 200, function() { b.removeClass('ui-corner-right ui-state-active').addClass('ui-corner-all'); });
+                    that._searchDelayed.cancelLastRequest();
+                    that.optionCache.filter('');
+                } else {
+                    that._lists[that.options.searchHeader].labelHeader.fadeTo('fast', 0.1, function() { $(this).css('visibility', 'hidden'); });
+                    $(this).removeClass('ui-corner-all').addClass('ui-corner-right ui-state-active');
+                    that._searchField.show('slide', {direction: 'right'}, 200, function() { $(this).focus(); });
+                    that._search();
+                }
+                return false;
+            })
+          ;
         },
 
         _applyListDroppable: function() {
@@ -292,21 +374,21 @@
                 });
             }
 
-            initDroppable(this._lists['selected'], true);
-            initDroppable(this._lists['available'], false);
+            initDroppable(this._lists['selected'].listContent, true);
+            initDroppable(this._lists['available'].listContent, false);
 
             if (this.options.sortable) {
                 var that = this;
-                this._lists['selected'].sortable({
+                this._lists['selected'].listContent.sortable({
                      appendTo: 'parent',
                      axis: "y",
-                     containment: $('.multiselect-selected-list', this._elementWrapper), //"parent",
+                     containment: $('.uix-selected-list', this._elementWrapper), //"parent",
                      items: '.multiselect-element-wrapper',
                      handle: '.group-element',
                      revert: true,
-                     stop: $.proxy(function(evt, ui) {
+                     stop: function(evt, ui) {
                          var prevGroup;
-                         $('.multiselect-element-wrapper', that._lists['selected']).each(function() {
+                         $('.multiselect-element-wrapper', that._lists['selected'].listContent).each(function() {
                              var currGroup = that.optionCache._groups.get($(this).data('option-group'));
                              if (!prevGroup) {
                                  that.element.append(currGroup.groupElement);
@@ -315,23 +397,21 @@
                              }
                              prevGroup = currGroup;
                          });
-                     }, this)
+                     }
                  });
             }
         },
 
-        _search: function(text, silent) {
+        _search: function(term, silent) {
             if (this._searchField.is(':visible')) {
-                if (text) {
-                    this._searchField.val(text);
+                if (typeof term === "string") {   // issue #36
+                    this._searchField.val(term);
                 } else {
-                    text = this._searchField.val();
+                    term = this._searchField.val();
                 }
-            } else {
-                text = (""+text);
             }
 
-            this.optionCache.filter(text, silent);
+            this.optionCache.filter(term, silent);
         },
 
         _setLocale: function(locale) {
@@ -362,7 +442,8 @@
         _updateHeaders: function() {
             var t, info = this.optionCache.getSelectionInfo();
 
-            this._headers['selected']
+            //this._headers['selected']
+            this._lists['selected'].labelHeader
                 .text( t = this._t('itemsSelected', info.selected.total, {count:info.selected.total}) )
                 .parent().attr('title',
                     this.options.filterSelected
@@ -370,16 +451,133 @@
                       this._t('itemsFiltered', info.selected.filtered, {count:info.selected.filtered})
                     : t
                 );
-            this._headers['available']
+            //this._headers['available']
+            this._lists['available'].labelHeader
                 .text( this._t('itemsAvailable', info.available.total, {count:info.available.total}) )
                 .parent().attr('title',
                     this._t('itemsAvailable', info.available.count, {count:info.available.count}) + ", " +
                     this._t('itemsFiltered', info.available.filtered, {count:info.available.filtered}) );
         },
 
-        // call this method whenever the widget resizes
-        _resize: function() {
+        // call this method whenever the widget needs to be rendered or the layout refreshed.
+        // NOTE : the widget MUST be visible and have a width and height when calling this
+        _doLayout: function() {
             var pos = this.options.availableListPosition.toLowerCase();         // shortcut
+            var listOrder = ['selected', 'available'];
+            var table = $('<table>', { cellspacing: '0' }).addClass('uix-table');
+            var tableContents;
+            var splitRatio = (this.options.splitRatio * 100) + '%';
+            var i;
+
+            ('left,top'.indexOf(pos) >= 0) && listOrder.reverse();
+
+            // cleanup
+            for (i = 0; i < 2; i++) {
+              this._lists[listOrder[i]].listHeader.detach();
+              this._lists[listOrder[i]].listContent.detach();
+            }
+
+            this._elementWrapper.css({
+              width: this.element[0].style.width || this.element.css('width'),
+              height: this.element[0].style.height || this.element.css('height')
+            });
+
+            this._lists.buttonSearch.insertBefore( this._lists[this.options.searchHeader].labelHeader );
+
+            if ('left,right'.indexOf(pos) >= 0) {  // horizontal
+
+              tableContents = $('<thead>')
+                .append($('<tr>')
+                  .append($('<th>', { css: { width: splitRatio } })
+                    .append( this._lists[listOrder[0]].listHeader )
+                  )
+                  .append($('<th>').append(this._lists[listOrder[1]].listHeader))
+                ).add($('<tbody>')
+                  .append($('<tr>')
+                    .append($('<td>').append(this._lists[listOrder[0]].listContent))
+                    .append($('<td>').append(this._lists[listOrder[1]].listContent))
+                  )
+                )
+              ;
+
+            } else {  // vertical
+
+              /*
+              <table cellspacing="0" class="uix-multiselect">
+                  <tbody>
+                  <tr style="height:40%;">
+                      <td class="vlayout-row">
+                          <table cellspacing="0">
+                              <thead>
+                                  <tr>
+                                      <th>Head 1.1</th>
+                                  </tr>
+                              </thead>
+                              <tbody>
+                              <tr>
+                                  <td>Cell 1.1</td>
+                              </tr>
+                              </tbody>
+                          </table>
+                      </td>
+                  </tr>
+                  <tr>
+                      <td class="vlayout-row">
+                          <table cellspacing="0">
+                              <thead>
+                                  <tr>
+                                      <th>Head 1.2</th>
+                                  </tr>
+                              </thead>
+                              <tbody>
+                              <tr>
+                                  <td>Cell 1.2</td>
+                              </tr>
+                              </tbody>
+                          </table>
+                      </td>
+                  </tr>
+                  </tbody>
+              </table>
+              */
+
+              tableContents = $('<tbody>')
+                .append($('<tr>', { css: { height: splitRatio } })
+                  .append($('<td>').addClass('uix-table-row')
+                    .append(table.clone()
+                      .append($('<thead>')
+                        .append($('<tr>')
+                          .append($('<th>').append(this._lists[listOrder[0]].listHeader))
+                        )
+                      ).append($('<tbody>')
+                        .append($('<tr>')
+                          .append($('<td>').append(this._lists[listOrder[0]].listContent))
+                        )
+                      )
+                    )
+                  )
+                ).append($('<tr>')
+                  .append($('<td>').addClass('uix-table-row')
+                    .append(table.clone()
+                      .append($('<thead>')
+                        .append($('<tr>')
+                          .append($('<th>').append(this._lists[listOrder[1]].listHeader))
+                        )
+                      ).append($('<tbody>')
+                        .append($('<tr>')
+                          .append($('<td>').append(this._lists[listOrder[1]].listContent))
+                        )
+                      )
+                    )
+                  )
+                )
+              ;
+
+            }
+
+            table.append(tableContents).appendTo(this._elementWrapper.empty());
+
+            /*
             var sSize = ('left,right'.indexOf(pos) >= 0) ? 'Width' : 'Height';  // split size fn
             var tSize = ('left,right'.indexOf(pos) >= 0) ? 'Height' : 'Width';  // total size fn
             var cSl = this.element['outer'+sSize]() * this.options.splitRatio;  // list container size selected
@@ -417,23 +615,35 @@
             }
             // adjust search field width
             if (this._searchField) {
-                this._searchField.width( this._headers['available'].parent().width() - (isToggle ? 48 : 24) );
+                this._searchField.width( (sSize === 'Width' ? cAv : this.element.width()) - (isToggle ? 52 : 26) );  // issue #50
             }
 
             // calculate inner lists height
             this._lists['available'].height(hAv - this._headers['available'].parent().outerHeight() - 2);  // account for borders
             this._lists['selected'].height(hSl - this._headers['selected'].parent().outerHeight() - 2);    // account for borders
+            */
         },
 
         /**
          * return false if the event was prevented by an handler, true otherwise
          */
         _triggerUIEvent: function(event, ui) {
-            if (typeof event == 'string') {
+            var eventType;
+
+            if (typeof event === 'string') {
+                eventType = event;
                 event = $.Event(event);
+            } else {
+                eventType = event.type;
             }
 
-            this.element.trigger(event, ui);
+            //console.log($.inArray(event.type, NATIVE_EVENTS));
+
+            //if ($.inArray(event.type, NATIVE_EVENTS) > -1) {
+                this.element.trigger(event, ui);
+            //} else {
+            //    this._trigger(eventType, event, ui);
+            //}
 
             return !event.isDefaultPrevented();
         },
@@ -443,9 +653,12 @@
             switch(key) {
                 // TODO
             }
-            this._superApply(arguments);
+            if (typeof(this._superApply) == 'function'){
+                this._superApply(arguments);
+            }else{
+                $.Widget.prototype._setOption.apply(this, arguments);
+            }
         }
-
     });
 
 
@@ -509,16 +722,16 @@
     };
 
 
-    var transferDir = ['n','e','s','w'];                          // button icon direction
+    var transferDirection = ['n','e','s','w'];                          // button icon direction
     var transferOrientation = ['bottom','left','top','right'];    // list of matching directions with icons
     var transferIcon = function(pos, prefix, selected) {
-        return prefix + transferDir[($.inArray(pos.toLowerCase(), transferOrientation) + (selected ? 2 : 0)) % 4];
+        return prefix + transferDirection[($.inArray(pos.toLowerCase(), transferOrientation) + (selected ? 2 : 0)) % 4];
     };
 
     /**
      * setTimeout on steroids!
      */
-    var AsyncFunction = function(callback, timeout, self) {
+    var asyncFunction = function(callback, timeout, self) {
         var args = Array.prototype.slice.call(arguments, 3);
         return setTimeout(function() {
             callback.apply(self || window, args);
@@ -538,12 +751,12 @@
 
             this.cancelLastRequest();
 
-            this._timeout = AsyncFunction(function() {
+            this._timeout = asyncFunction(function() {
                 this._timeout = null;
                 this._lastSearchValue = this._widget._searchField.val();
 
                 this._widget._search();
-            }, this._options.delay, this);
+            }, this._widget.options.searchDelay, this);
         },
         cancelLastRequest: function() {
             if (this._timeout) {
@@ -634,8 +847,8 @@
     var OptionCache = function(widget) {
         this._widget = widget;
         this._listContainers = {
-            'selected': $('<div></div>').appendTo(this._widget._lists['selected']),
-            'available': $('<div></div>').appendTo(this._widget._lists['available'])
+            'selected': $('<div></div>').appendTo(this._widget._lists['selected'].listContent),
+            'available': $('<div></div>').appendTo(this._widget._lists['available'].listContent)
         };
 
         this._elements = [];
@@ -687,7 +900,7 @@
 
             var e = $('<div></div>')
                 .addClass('ui-widget-header ui-priority-secondary group-element')
-                .append( $('<button></button>').addClass('uix-control-right')
+                .append( $('<button></button>', { type:"button" }).addClass('uix-control-right')
                     .attr('data-localekey', (selected?'de':'')+'selectAllGroup')
                     .attr('title', this._widget._t((selected?'de':'')+'selectAllGroup'))
                     .button({icons:{primary:transferIcon(this._widget.options.availableListPosition, 'ui-icon-arrowstop-1-', selected)}, text:false})
@@ -722,24 +935,37 @@
                 .append(labelCount)
             ;
 
-            var fnToggle;
+            var fnToggle,
+                groupIcon = (grpElement) ? grpElement.attr('data-group-icon') : null;
             if (this._widget.options.collapsableGroups) {
+                var collapseIconAttr = (grpElement) ? grpElement.attr('data-collapse-icon') : null,
+                    grpCollapseIcon = (collapseIconAttr) ? 'ui-icon ' + collapseIconAttr : 'ui-icon ui-icon-triangle-1-s';
                 var h = $('<span></span>').addClass('ui-icon collapse-handle')
                     .attr('data-localekey', 'collapseGroup')
                     .attr('title', this._widget._t('collapseGroup'))
-                    .addClass(this._widget.options.groupCollapseIcon)
+                    .addClass(grpCollapseIcon)
                     .mousedown(function(e) { e.stopPropagation(); })
-                    .click(function(e) { e.preventDefault(); e.stopPropagation(); fnToggle(); return false; })
+                    .click(function(e) { e.preventDefault(); e.stopPropagation(); fnToggle(grpElement); return false; })
                     .prependTo(e.addClass('group-element-collapsable'))
                 ;
 
-                fnToggle = function() {
-                    var gDataDst = getLocalData()[selected?'selected':'available'];
+                fnToggle = function(grpElement) {
+                    var gDataDst = getLocalData()[selected?'selected':'available'],
+                        collapseIconAttr = (grpElement) ? grpElement.attr('data-collapse-icon') : null,
+                        expandIconAttr = (grpElement) ? grpElement.attr('data-expand-icon') : null,
+                        collapseIcon = (collapseIconAttr) ? 'ui-icon ' + collapseIconAttr : 'ui-icon ui-icon-triangle-1-s',
+                        expandIcon = (expandIconAttr) ? 'ui-icon ' + expandIconAttr : 'ui-icon ui-icon-triangle-1-e';
                     gDataDst.collapsed = !gDataDst.collapsed;
                     gDataDst.listContainer.slideToggle();  // animate options?
-                    h.removeClass(gDataDst.collapsed ? obj._widget.options.groupCollapseIcon : obj._widget.options.groupExpandIcon)
-                     .addClass(gDataDst.collapsed ? obj._widget.options.groupExpandIcon : obj._widget.options.groupCollapseIcon);
+                    h.removeClass(gDataDst.collapsed ? collapseIcon : expandIcon)
+                     .addClass(gDataDst.collapsed ? expandIcon : collapseIcon);
                 };
+            }else{
+                if (groupIcon) {
+                    $('<span></span>').addClass('collapse-handle '+groupIcon)
+                        .css('cursor','default')
+                        .prependTo(e.addClass('group-element-collapsable'));
+                }
             }
             return $('<div></div>')
                 // create an utility function to update group element count
@@ -758,7 +984,7 @@
                 e.sortable({
                     tolerance: "pointer",
                     appendTo: this._widget._elementWrapper,
-                    connectWith: this._widget._lists['available'].attr('id'),
+                    connectWith: this._widget._lists['available'].listContent.attr('id'),
                     scope: this._widget.scope,
                     helper: 'clone',
                     receive: function(evt, ui) {
@@ -805,6 +1031,7 @@
             var o = this._widget.options.optionRenderer
                   ? this._widget.options.optionRenderer(optElement, optGroup)
                   : $('<div></div>').text(optElement.text());
+            var optIcon = optElement.attr("data-option-icon");
             var e = $('<div></div>').append(o).addClass('ui-state-default option-element')
                 .attr("unselectable", "on")  // disable text selection on this element (IE, Opera)
                 .data('element-index', -1)
@@ -846,8 +1073,8 @@
             } else if (optElement.prop('disabled')) {
                 e[(optElement.prop('disabled') ? "add" : "remove") + "Class"]('ui-state-disabled');
             }
-            if (optGroup) {
-                e.addClass('grouped-option').prepend($('<span></span>').addClass('ui-icon ui-icon-bullet'));
+            if (optIcon) {
+                e.addClass('grouped-option').prepend($('<span></span>').addClass('ui-icon ' + optIcon));
             }
             return e;
         },
@@ -929,25 +1156,24 @@
         },
 
         _bufferedMode: function(enabled) {
+            var that = this;
+
             if (enabled) {
                 this._oldMoveEffect = this._moveEffect; this._moveEffect = null;
 
-                // backup lists' scroll position before going into buffered mode
-                this._widget._lists['selected'].data('scrollTop', this._widget._lists['selected'].scrollTop());
-                this._widget._lists['available'].data('scrollTop', this._widget._lists['available'].scrollTop());
-
-                this._listContainers['selected'].detach();
-                this._listContainers['available'].detach();
+                $.each(['selected', 'available'], function(index, listKey) {
+                  // backup lists' scroll position before going into buffered mode
+                  that._widget._lists[listKey].listContent.data('scrollTop', that._widget._lists[listKey].listContent.scrollTop());
+                  that._listContainers[listKey].detach();
+                });
             } else {
-                // restore scroll position (if available)
-                this._widget._lists['selected'].append(this._listContainers['selected'])
-                        .scrollTop( this._widget._lists['selected'].data('scrollTop') || 0 );
-                this._widget._lists['available'].append(this._listContainers['available'])
-                        .scrollTop( this._widget._lists['available'].data('scrollTop') || 0 );
+                $.each(['selected', 'available'], function(index, listKey) {
+                  // restore scroll position (if available)
+                  that._widget._lists[listKey].listContent.append(that._listContainers[listKey])
+                          .scrollTop( that._widget._lists[listKey].listContent.data('scrollTop') || 0 );
+                });
 
-                this._moveEffect = this._oldMoveEffect;
-
-                delete this._oldMoveEffect;
+                this._moveEffect = this._oldMoveEffect; delete this._oldMoveEffect;
             }
 
         },
@@ -958,9 +1184,9 @@
             this._listContainers['available'].empty();
 
             if (destroy) {
-                $.each(this._elements, function(i, e) {
-                   e.optionElement.removeData('element-index');
-                });
+                for (var i=0, e=this._elements, len=e.length; i<len; i++) {
+                    e[i].optionElement.removeData('element-index');
+                }
                 delete this._elements;
                 delete this._groups;
                 delete this._listContainers;
@@ -1118,12 +1344,12 @@
 
         },
 
-        filter: function(text, silent) {
+        filter: function(term, silent) {
 
-            if (text && !silent) {
-                var ui = { text:text };
+            if (term && !silent) {
+                var ui = { term:term };
                 if (this._widget._triggerUIEvent(EVENT_SEARCH, ui )) {
-                    text = ui.text;  // update text
+                    term = ui.term;  // update term
                 } else {
                     return;
                 }
@@ -1132,15 +1358,16 @@
             this._bufferedMode(true);
 
             var filterSelected = this._widget.options.filterSelected;
-
-            text = (''+text).toLowerCase();
-            if (text.length == 0) {
-                text = false;
-            }
+            var filterFn = this._widget.options.searchFilter || function(term, opt) {
+                return opt.innerHTML.toLocaleLowerCase().indexOf(term) > -1;
+            };
+            term = (this._widget.options.searchPreFilter || function(term) {
+                return term ? (term+"").toLocaleLowerCase() : false;
+            })(term);
 
             for (var i=0, eData, len=this._elements.length, filtered; i<len; i++) {
                 eData = this._elements[i];
-                filtered = !(!text || (eData.optionElement.text().toLowerCase().indexOf(text) > -1));
+                filtered = !(!term || filterFn(term, eData.optionElement[0]));
 
                 if ((!eData.selected || filterSelected) && (eData.filtered != filtered)) {
                     eData.listElement[filtered ? 'hide' : 'show']();
@@ -1152,7 +1379,6 @@
 
             this._widget._updateHeaders();
             this._bufferedMode(false);
-
         },
 
         getSelectionInfo: function() {
@@ -1232,13 +1458,13 @@
         var data = p.data || {};
         var t;
 
-        if (plural == 2 && i18n[p.key+'_plural_two']) {
+        if (plural === 2 && i18n[p.key+'_plural_two']) {
             t = i18n[p.key+'_plural_two'];
-        } else if ((plural == 2 || plural == 3) && i18n[p.key+'_plural_few']) {
+        } else if ((plural === 2 || plural === 3) && i18n[p.key+'_plural_few']) {
             t = i18n[p.key+'_plural_few']
         } else if (plural > 1 && i18n[p.key+'_plural']) {
             t = i18n[p.key+'_plural'];
-        } else if (plural == 0 && i18n[p.key+'_nil']) {
+        } else if (plural === 0 && i18n[p.key+'_nil']) {
             t = i18n[p.key+'_nil'];
         } else {
             t = i18n[p.key] || '';
@@ -1252,19 +1478,19 @@
      */
     $.uix.multiselect.i18n = {
         '': {
-            itemsSelected_nil: 'no selected option',           // 0
+            itemsSelected_nil: 'No options selected',          // 0
             itemsSelected: '{count} selected option',          // 0, 1
-            itemsSelected_plural: '{count} selected options',  // n
+            itemsSelected_plural: '{count} options selected',  // n
             //itemsSelected_plural_two: ...                    // 2
             //itemsSelected_plural_few: ...                    // 3, 4
-            itemsAvailable_nil: 'no item available',
-            itemsAvailable: '{count} available option',
-            itemsAvailable_plural: '{count} available options',
+            itemsAvailable_nil: 'No items available',
+            itemsAvailable: '{count} options available',
+            itemsAvailable_plural: '{count} options available',
             //itemsAvailable_plural_two: ...
             //itemsAvailable_plural_few: ...
-            itemsFiltered_nil: 'no option filtered',
-            itemsFiltered: '{count} option filtered',
-            itemsFiltered_plural: '{count} options filtered',
+            itemsFiltered_nil: 'No options found',
+            itemsFiltered: '{count} option found',
+            itemsFiltered_plural: '{count} options found',
             //itemsFiltered_plural_two: ...
             //itemsFiltered_plural_few: ...
             selectAll: 'Select All',
@@ -1277,4 +1503,4 @@
         }
     };
 
-})(jQuery);
+})(jQuery, window);
